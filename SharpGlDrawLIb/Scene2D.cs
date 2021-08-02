@@ -54,5 +54,10 @@ namespace SharpGLDrawLib
         {
             Main.Refresh();
         }
+
+        private void Scene2D_SizeChanged(object sender, EventArgs e)
+        {
+            InitOpenGL(0, 0, Width, Height);
+        }
     }
 }

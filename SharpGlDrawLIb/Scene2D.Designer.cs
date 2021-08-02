@@ -56,6 +56,7 @@ namespace SharpGLDrawLib
             this.Controls.Add(this.Main);
             this.Name = "Scene2D";
             this.Size = new System.Drawing.Size(201, 153);
+            this.SizeChanged += new System.EventHandler(this.Scene2D_SizeChanged);
             this.Resize += new System.EventHandler(this.Scene2D_Resize);
             ((System.ComponentModel.ISupportInitialize)(this.Main)).EndInit();
             this.ResumeLayout(false);

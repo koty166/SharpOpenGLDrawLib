@@ -358,7 +358,7 @@ namespace SharpGLDrawLib
                             Drawer.DrawText((int)(-Length + X), (int)(YPos[i] + Y), Color.R, Color.G, Color.B, "Arial", 10, "0");
                         continue;
                     }
-                    Drawer.DrawText((int)(-Length * 8 + X), (int)(YPos[i] + Y), Color.R, Color.G, Color.B, "Arial", 10, Math.Round((YMaxValue / YSteps * i), 2).ToString());
+                    Drawer.DrawText((int)(-Length * 8 + X), (int)(YPos[i] + Y), Color.R, Color.G, Color.B, "Arial", 10, Math.Round((YMaxValue / YSteps * i), 3).ToString());
                 }
                 for (int i = 0; i < XPos.Length; i++)
                 {
@@ -369,7 +369,7 @@ namespace SharpGLDrawLib
                         continue;
                     }
 
-                    Drawer.DrawText((int)(XPos[i] + X), (int)(-Length * 3 + Y), Color.R, Color.G, Color.B, "Arial", 10, Math.Round((XMaxValue / XSteps * i), 2).ToString());
+                    Drawer.DrawText((int)(XPos[i] + X), (int)(-Length * 3 + Y), Color.R, Color.G, Color.B, "Arial", 10, Math.Round((XMaxValue / XSteps * i), 3).ToString());
                 }
             }
 
