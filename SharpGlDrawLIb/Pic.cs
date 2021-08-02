@@ -8,6 +8,8 @@ using SharpGL.SceneGraph.Assets;
 using SharpGL;
 using SharpGLDrawLib;
 using System.Windows.Forms;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 
 namespace SharpGLDrawLib
 {
@@ -32,11 +34,7 @@ namespace SharpGLDrawLib
         /// <summary>
         /// Позиция картинки на экране. Шаг смещения при увелечении/уменьшении
         /// </summary>
-        float x,y,step;
-        /// <summary>
-        /// Текстура для отрисовки
-        /// </summary>
-        Texture Tex;
+        float x,y;
         /// <summary>
         /// Материнский объект OpenGL
         /// </summary>
@@ -45,6 +43,8 @@ namespace SharpGLDrawLib
         /// Последняя позиция мыши, позиция -1;0 означает отсутсвие последней позиции (Point не допускает null ¯\_(ツ)_/¯)
         /// </summary>
         Point LastPos = new Point(-1,0);
+        IntPtr Addr;
+        BitmapData BData;
         /// <summary>
         /// Конструктор класса
         /// </summary>
@@ -76,13 +76,11 @@ namespace SharpGLDrawLib
             PointF ImgPos = ToOpenGLSpace(e.Location);
             EGlMouseClick?.Invoke(e, ImgPos);
         }
-
         private void Main_MouseClick(object sender, MouseEventArgs e)
         {
             Point ImgPos = GetMouseClickPos(e.Location);
             EPMouseClick?.Invoke(this,new MouseEventArgs(e.Button,e.Clicks,ImgPos.X,ImgPos.Y,e.Delta));
         }
-
         /// <summary>
         /// Инициализует текстуру картинки и её положение в экранном пространстве
         /// </summary>
@@ -91,27 +89,31 @@ namespace SharpGLDrawLib
         /// <param name="_x">X координата картинки</param>
         /// <param name="_y">Y координата картинки</param>
         /// <param name="_step">Шаг смешения при изменении маштаба</param>
-        public void Init(Bitmap Data, float _scale = 1.0f, int _x = 0, int _y = 0, float _step = 10.0f)
+        public void Init(Bitmap Data, float _scale = 1.0f, int _x = 0, int _y = 0)
         {
+           
             //А хуй его знает, почему он не хочет работать в конструкторе класса
             InitOpenGL(0, 0, this.Width, this.Height);
+         
+
+            BData = Data.LockBits(new Rectangle(new Point(0, 0), Data.Size), ImageLockMode.ReadWrite, Data.PixelFormat);
+            Addr = BData.Scan0;
+
+            byte[] byf = new byte[Math.Abs(BData.Stride) * BData.Height];
+            Marshal.Copy(BData.Scan0, byf, 0, Math.Abs(BData.Stride) * BData.Height);
+
+            byf = Drawer.SwapInArr(byf, BData.Height, BData.Stride);
+
+            Marshal.Copy(byf, 0, BData.Scan0, byf.Length);
+
 
             x = _x;
             y = (_y==0?Data.Height:_y);
             height = Data.Height;
             width = Data.Width;
             scale = _scale;
-            step = _step;
-
-
-
-            //проверить трижды
-            if (Tex != null)
-                Tex = null;
-            Tex = new Texture();
-            Tex.Create(gl, Data);
             Data = null;
-            //GC.Collect();
+            GC.Collect();
             DrawImage();
         }
 
@@ -149,14 +151,15 @@ namespace SharpGLDrawLib
         private void Main_OpenGLDraw(object sender, RenderEventArgs args)
         {
             gl.Clear(OpenGL.GL_COLOR_BUFFER_BIT | OpenGL.GL_DEPTH_BUFFER_BIT);
-            gl.LoadIdentity();
-            gl.ClearColor(0, 0, 0, 0);
+             gl.LoadIdentity();
+              gl.ClearColor(0, 0, 0, 0);
 
 
-            if (Tex != null)
-                Drawer.DrawImage(gl, Tex, x, y, -height * scale, width * scale);
-            Draw?.Invoke(gl);
-            gl.Flush();
+          
+            if (BData != null)
+                Drawer.DrawImageByPixels(gl, Addr, x, y, BData.Width, BData.Height,scale);
+              Draw?.Invoke(gl);
+             gl.Flush();
         }
 
        //TODO: Добавить отрисовку по координатам
@@ -172,11 +175,11 @@ namespace SharpGLDrawLib
                 LogError("Объект OpenGL не инициализирован, это внутрення ошибка, сообщите разработчику");
                 return;
             }
-            if(Tex == null)
-            {
-                LogError("Текстура неинициализированна, это может говорить о преждевременном вызове функции отрисовки изображения");
-                return;
-            }
+            //if(Tex == null)
+            //{
+            //    LogError("Текстура неинициализированна, это может говорить о преждевременном вызове функции отрисовки изображения");
+            //    return;
+            //}
             Main.Refresh();
             
 
@@ -198,8 +201,8 @@ namespace SharpGLDrawLib
         public void Increase(float IncreaseStep)
         {
             scale += IncreaseStep;
-          //  x -= step;
-         //   y -= step;
+            x -= scale*100;
+            y -= scale * 100;
             DrawImage();
         }
         /// <summary>
@@ -210,8 +213,8 @@ namespace SharpGLDrawLib
         {
             if(scale - DecreaseStep >=0)
             scale -= DecreaseStep;
-         //   x += step;
-         //   y += step;
+            x += scale * 100;
+            y += scale * 100;
             DrawImage();
         }
         /// <summary>

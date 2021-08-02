@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Drawing;
+using System.Drawing.Imaging;
 using SharpGL;
 using SharpGL.SceneGraph.Assets;
+using System.Runtime.InteropServices;
 
 namespace SharpGLDrawLib
 {
@@ -534,6 +536,61 @@ namespace SharpGLDrawLib
             Texture T = new Texture();
             T.Create(gl,Im);
             DrawImage(gl,T,X,Y,Heigth,Width,Z);
+
+        }
+        static void swap(ref byte a,ref byte b)
+        {
+            byte c=a;
+            a = b;
+            b = c;
+
+        }
+        public static byte[] SwapInArr(byte[] arr,int height,int L)
+        {
+            for (int k = 0; k < height / 2 * L; k++)
+            {
+                int i0 = k / L;
+                int j0 = k % L;
+                int add = (height-1 - i0) * L + j0;
+                swap(ref arr[k], ref arr[add]);
+            }
+            return arr;
+        }
+        public static IntPtr GetPtr (BitmapData ImData)
+        {
+            byte[,] data = new byte[ImData.Height, ImData.Stride];
+            byte[] byf = new byte[Math.Abs(ImData.Stride) * ImData.Height];
+
+            Marshal.Copy(ImData.Scan0, byf, 0, Math.Abs(ImData.Stride) * ImData.Height);
+
+            byf = SwapInArr(byf, ImData.Height, ImData.Stride);
+
+            Marshal.Copy(byf, 0, ImData.Scan0, byf.Length);
+            return ImData.Scan0;
+        }
+        public static void DrawImageByPixels(OpenGL gl, Bitmap Im, float X, float Y, float d, float aa, BitmapData ImData)
+        {
+
+            GetPtr(ImData);
+
+            gl.RasterPos(X, Y,0);
+            gl.PixelZoom(1, 1);
+            gl.PixelStore(OpenGL.GL_UNPACK_ALIGNMENT, 1);
+            gl.DrawPixels(ImData.Width,ImData.Height,OpenGL.GL_RGB,OpenGL.GL_UNSIGNED_BYTE, ImData.Scan0);
+
+        }
+        public static void DrawImageByPixels(OpenGL gl, IntPtr Addr, float X, float Y, int Width, int Height,float scale)
+        {
+            if (X < 0 || Y < 0)
+            {
+                gl.RasterPos(0, 0);
+                gl.Bitmap(0, 0, 0, 0, X, Y, null);
+            }
+            else
+                gl.RasterPos(X, Y);
+            gl.PixelZoom(1*scale, 1*scale);
+            gl.PixelStore(OpenGL.GL_UNPACK_ALIGNMENT, 4);
+            gl.DrawPixels(Width, Height, OpenGL.GL_RGB, OpenGL.GL_UNSIGNED_BYTE, Addr);
 
         }
     }
