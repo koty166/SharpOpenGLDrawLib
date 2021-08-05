@@ -10,13 +10,14 @@ using SharpGLDrawLib;
 using System.Windows.Forms;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 
 namespace SharpGLDrawLib
 {
     /// <summary>
     /// Предоставляет базовые функции для отрисовки и перемещения 2d картинки в пространстве OpenGl
     /// </summary>
-    public class Pic: SharpGLDrawLib.Scene2D
+    public class Pic: SharpGLDrawLib.Scene2D,IDisposable
     {
 
         /// <summary>
@@ -44,7 +45,7 @@ namespace SharpGLDrawLib
         /// </summary>
         Point LastPos = new Point(-1,0);
         IntPtr Addr;
-        BitmapData BData;
+        public BitmapData BData { get; private set; }
         /// <summary>
         /// Конструктор класса
         /// </summary>
@@ -81,6 +82,7 @@ namespace SharpGLDrawLib
             Point ImgPos = GetMouseClickPos(e.Location);
             EPMouseClick?.Invoke(this,new MouseEventArgs(e.Button,e.Clicks,ImgPos.X,ImgPos.Y,e.Delta));
         }
+        Bitmap Img;
         /// <summary>
         /// Инициализует текстуру картинки и её положение в экранном пространстве
         /// </summary>
@@ -91,22 +93,16 @@ namespace SharpGLDrawLib
         /// <param name="_step">Шаг смешения при изменении маштаба</param>
         public void Init(Bitmap Data, float _scale = 1.0f, int _x = 0, int _y = 0)
         {
-           
+            
             //А хуй его знает, почему он не хочет работать в конструкторе класса
             InitOpenGL(0, 0, this.Width, this.Height);
-         
 
+            Img = Data;
             BData = Data.LockBits(new Rectangle(new Point(0, 0), Data.Size), ImageLockMode.ReadWrite, Data.PixelFormat);
             Addr = BData.Scan0;
-
-            byte[] byf = new byte[Math.Abs(BData.Stride) * BData.Height];
-            Marshal.Copy(BData.Scan0, byf, 0, Math.Abs(BData.Stride) * BData.Height);
-
-            byf = Drawer.SwapInArr(byf, BData.Height, BData.Stride);
-
-            Marshal.Copy(byf, 0, BData.Scan0, byf.Length);
-
-
+            
+            SwapImageInMemory();
+            
             x = _x;
             y = (_y==0?Data.Height:_y);
             height = Data.Height;
@@ -155,9 +151,12 @@ namespace SharpGLDrawLib
               gl.ClearColor(0, 0, 0, 0);
 
 
-          
-            if (BData != null)
-                Drawer.DrawImageByPixels(gl, Addr, x, y, BData.Width, BData.Height,scale);
+            try
+            {
+                if (BData != null)
+                    Drawer.DrawImageByPixels(gl, Addr, x, y, BData.Width, BData.Height, scale);
+            }
+            catch { throw new Exception(); }
               Draw?.Invoke(gl);
              gl.Flush();
         }
@@ -289,19 +288,38 @@ namespace SharpGLDrawLib
        public Point FromOpenGLToPictureSpace(PointF Point)
         {  // Я бы мог без труда уместить вся это в одну строку, но тогда сложность логики увеличится. Если я забуду принцип, нарисуй прямоугольник
             // в прямоугольной системе координат и рассчитай отношение к стороне прямоугольника.
-            float a = width  *scale, b = height  * scale;
+            float a = width  * scale, b = height  * scale;
             int bx = (int)((Point.X - x) / a * width);
             int by = (int)((b - (Point.Y - y)) / b * height);
-            return new Point(bx, by-height);
+            return new Point(bx, by);
         }
         public PointF FromPictureToOpenGLSpace(Point Point)
         {  // Я бы мог без труда уместить вся это в одну строку, но тогда сложность логики увеличится. Если я забуду принцип, нарисуй прямоугольник
             // в прямоугольной системе координат и рассчитай отношение к стороне прямоугольника.
-            Point = new Point(Point.X,Point.Y + height);
+            Point = new Point(Point.X,Point.Y);
             float a = width * scale, b = height * scale;
             float bx = Point.X * a / width + x;
             float by = b + y - (Point.Y * b / height);
             return new PointF(bx, by);
+        }
+        public void SwapImageInMemory()
+        {
+            byte[] byf = new byte[Math.Abs(BData.Stride) * BData.Height];
+            Marshal.Copy(BData.Scan0, byf, 0, Math.Abs(BData.Stride) * BData.Height);
+
+            byf = Drawer.SwapInArr(byf, BData.Height, BData.Stride);
+
+            Marshal.Copy(byf, 0, BData.Scan0, byf.Length);
+        }
+        public new void Dispose()
+        {
+            new Bitmap(BData.Width, BData.Height).UnlockBits(BData);
+            BData = null;
+            GC.SuppressFinalize(this);
+        }
+        ~Pic()
+        {
+            Dispose();
         }
 
 
