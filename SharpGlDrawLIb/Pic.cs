@@ -9,7 +9,7 @@ using SharpGL;
 using SharpGLDrawLib;
 using System.Windows.Forms;
 using System.Drawing.Imaging;
-using System.Runtime.InteropServices;
+
 using System.Diagnostics;
 
 namespace SharpGLDrawLib
@@ -29,10 +29,6 @@ namespace SharpGLDrawLib
         /// </summary>
         float scale;
         /// <summary>
-        /// Ширина и высота изображения (в памяти)
-        /// </summary>
-        int height, width;
-        /// <summary>
         /// Позиция картинки на экране. Шаг смещения при увелечении/уменьшении
         /// </summary>
         float x,y;
@@ -44,8 +40,7 @@ namespace SharpGLDrawLib
         /// Последняя позиция мыши, позиция -1;0 означает отсутсвие последней позиции (Point не допускает null ¯\_(ツ)_/¯)
         /// </summary>
         Point LastPos = new Point(-1,0);
-        IntPtr Addr;
-        public BitmapData BData { get; private set; }
+        public BitmapProvider BProvider;
         /// <summary>
         /// Конструктор класса
         /// </summary>
@@ -62,6 +57,7 @@ namespace SharpGLDrawLib
         public event EventHandler<PointF> EGlMouseClick;
         public Pic():base()
         {
+            BProvider = new BitmapProvider();
             gl = Main.OpenGL;
             Main.MouseWheel += Main_MouseWheel;
             Main.MouseLeave += Main_MouseLeave;
@@ -82,7 +78,6 @@ namespace SharpGLDrawLib
             Point ImgPos = GetMouseClickPos(e.Location);
             EPMouseClick?.Invoke(this,new MouseEventArgs(e.Button,e.Clicks,ImgPos.X,ImgPos.Y,e.Delta));
         }
-        Bitmap Img;
         /// <summary>
         /// Инициализует текстуру картинки и её положение в экранном пространстве
         /// </summary>
@@ -91,31 +86,33 @@ namespace SharpGLDrawLib
         /// <param name="_x">X координата картинки</param>
         /// <param name="_y">Y координата картинки</param>
         /// <param name="_step">Шаг смешения при изменении маштаба</param>
-        public void Init(Bitmap Data, float _scale = 1.0f, int _x = 0, int _y = 0)
+        public void Init(float _scale = 1.0f, int _x = 0, int _y = 0)
         {
-            
+            if (BProvider == null)
+                throw new Exception("Провайдер изображения не инициализован");
             //А хуй его знает, почему он не хочет работать в конструкторе класса
             InitOpenGL(0, 0, this.Width, this.Height);
-
-            Img = Data;
-            BData = Data.LockBits(new Rectangle(new Point(0, 0), Data.Size), ImageLockMode.ReadWrite, Data.PixelFormat);
-            Addr = BData.Scan0;
-            
-            SwapImageInMemory();
-            
+            if (!BProvider.IsInit)
+                return;            
             x = _x;
-            y = (_y==0?Data.Height:_y);
-            height = Data.Height;
-            width = Data.Width;
+            y = _y;
             scale = _scale;
-            Data = null;
-            GC.Collect();
+         //   GC.Collect();
             DrawImage();
         }
 
         //обработчики перемещения мыши
         private void Main_MouseUp(object sender, MouseEventArgs e)
         {
+            try
+            {
+                BProvider.UpdatePart(BProvider.CurrentPosLeftTop.X, BProvider.CurrentPosLeftTop.Y,Main.Width/100*100, Main.Height/100*100);
+                x = 0;
+                y = 0;
+                DrawImage();
+                
+            }
+            catch (Exception ex) { /*MessageBox.Show(ex.Message);*/ return; }
             LastPos = new Point(-1, 0);
         }
 
@@ -148,13 +145,13 @@ namespace SharpGLDrawLib
         {
             gl.Clear(OpenGL.GL_COLOR_BUFFER_BIT | OpenGL.GL_DEPTH_BUFFER_BIT);
              gl.LoadIdentity();
-              gl.ClearColor(0, 0, 0, 0);
+              gl.ClearColor(255, 255, 255, 255);
 
 
             try
             {
-                if (BData != null)
-                    Drawer.DrawImageByPixels(gl, Addr, x, y, BData.Width, BData.Height, scale);
+                if (BProvider?.CurrentBitmap != null)
+                    Drawer.DrawImageByPixels(gl, BProvider.Addr, x, y, BProvider.CurrentBSize.Width, BProvider.CurrentBSize.Height, 1);
             }
             catch { throw new Exception(); }
               Draw?.Invoke(gl);
@@ -172,7 +169,15 @@ namespace SharpGLDrawLib
             if (!IsGLInit)
             {
                 LogError("Объект OpenGL не инициализирован, это внутрення ошибка, сообщите разработчику");
+
                 return;
+            }
+            if(!BProvider.IsLock)
+            {
+                bool tr = BProvider.LockBits();
+                if (!tr)
+                    return;
+                            BProvider.SwapImageInMemory();
             }
             //if(Tex == null)
             //{
@@ -200,8 +205,8 @@ namespace SharpGLDrawLib
         public void Increase(float IncreaseStep)
         {
             scale += IncreaseStep;
-            x -= scale*100;
-            y -= scale * 100;
+            //x -= scale*100;
+            //y -= scale * 100;
             DrawImage();
         }
         /// <summary>
@@ -212,8 +217,8 @@ namespace SharpGLDrawLib
         {
             if(scale - DecreaseStep >=0)
             scale -= DecreaseStep;
-            x += scale * 100;
-            y += scale * 100;
+            //x += scale * 100;
+            //y += scale * 100;
             DrawImage();
         }
         /// <summary>
@@ -223,8 +228,10 @@ namespace SharpGLDrawLib
         /// <param name="dy"></param>
         public new void Move(float dx,float dy)
         {
+            const int speedUp = 2;
             x += dx;
             y += dy;
+            BProvider.CurrentPosLeftTop = new Point((int)(BProvider.CurrentPosLeftTop.X-dx* speedUp), (int)(BProvider.CurrentPosLeftTop.Y+dy* speedUp));
             DrawImage();
         }
         /// <summary>
@@ -285,37 +292,33 @@ namespace SharpGLDrawLib
         /// </summary>
         /// <param name="Point">Координаты точки в с.к. Opengl</param>
         /// <returns></returns>
-       public Point FromOpenGLToPictureSpace(PointF Point)
-        {  // Я бы мог без труда уместить вся это в одну строку, но тогда сложность логики увеличится. Если я забуду принцип, нарисуй прямоугольник
+       public Point FromOpenGLToPictureSpace(PointF _Point)
+            
+        {
+            if (!BProvider.IsInit)
+                return Point.Empty;
+            // Я бы мог без труда уместить вся это в одну строку, но тогда сложность логики увеличится. Если я забуду принцип, нарисуй прямоугольник
             // в прямоугольной системе координат и рассчитай отношение к стороне прямоугольника.
-            float a = width  * scale, b = height  * scale;
-            int bx = (int)((Point.X - x) / a * width);
-            int by = (int)((b - (Point.Y - y)) / b * height);
+            float a = BProvider.CurrentBSize.Width  * scale, b = BProvider.CurrentBSize.Height * scale;
+            int bx = (int)((_Point.X - x) / a * BProvider.CurrentBSize.Width);
+            int by = (int)((b - (_Point.Y - y)) / b * BProvider.CurrentBSize.Height);
             return new Point(bx, by);
         }
         public PointF FromPictureToOpenGLSpace(Point Point)
-        {  // Я бы мог без труда уместить вся это в одну строку, но тогда сложность логики увеличится. Если я забуду принцип, нарисуй прямоугольник
+        {
+            if (!BProvider.IsInit)
+                return PointF.Empty;
+            // Я бы мог без труда уместить вся это в одну строку, но тогда сложность логики увеличится. Если я забуду принцип, нарисуй прямоугольник
             // в прямоугольной системе координат и рассчитай отношение к стороне прямоугольника.
             Point = new Point(Point.X,Point.Y);
-            float a = width * scale, b = height * scale;
-            float bx = Point.X * a / width + x;
-            float by = b + y - (Point.Y * b / height);
+            float a = BProvider.CurrentBSize.Width * scale, b = BProvider.CurrentBSize.Height * scale;
+            float bx = Point.X * a / BProvider.CurrentBSize.Width + x;
+            float by = b + y - (Point.Y * b / BProvider.CurrentBSize.Height);
             return new PointF(bx, by);
-        }
-        public void SwapImageInMemory()
-        {
-            byte[] byf = new byte[Math.Abs(BData.Stride) * BData.Height];
-            Marshal.Copy(BData.Scan0, byf, 0, Math.Abs(BData.Stride) * BData.Height);
-
-            byf = Drawer.SwapInArr(byf, BData.Height, BData.Stride);
-
-            Marshal.Copy(byf, 0, BData.Scan0, byf.Length);
         }
         public new void Dispose()
         {
-            new Bitmap(BData.Width, BData.Height).UnlockBits(BData);
-            BData = null;
-            GC.SuppressFinalize(this);
+            BProvider.Dispose();
         }
         ~Pic()
         {

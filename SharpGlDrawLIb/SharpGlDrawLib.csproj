@@ -60,6 +60,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BitmapProvider.cs" />
     <Compile Include="Graph.cs">
       <SubType>UserControl</SubType>
     </Compile>
