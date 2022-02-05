@@ -146,7 +146,7 @@ namespace SharpGLDrawLib
         /// <param name="R">Радиус круга</param>
         public static void DrawCircle(OpenGL Drawer, Color Color, float X, float Y, float Z, float R)
         {
-            Drawer.Begin(OpenGL.GL_LINE_LOOP);
+            Drawer.Begin(OpenGL.GL_POLYGON);
 
 
             Drawer.Color(Color.R, Color.G, Color.B);
@@ -157,7 +157,13 @@ namespace SharpGLDrawLib
             Drawer.End();
 
         }
-
+        public static void DrawCircles(OpenGL Drawer, Color Color, PointF[] Points, float R, float Z = 0)
+        {
+            foreach (var item in Points)
+            {
+                DrawCircle(Drawer,Color,item.X,item.Y,Z,R);
+            }
+        }
         /// <summary>
         /// Соеденяет точки в незамкнутый многоугольник
         /// </summary>
@@ -371,13 +377,33 @@ namespace SharpGLDrawLib
                         continue;
                     }
 
-                    Drawer.DrawText((int)(XPos[i] + X), (int)(-Length * 3 + Y), Color.R, Color.G, Color.B, "Arial", 10, Math.Round((XMaxValue / XSteps * i), 3).ToString());
+                    Drawer.DrawText((int)(XPos[i] + X), (int)(-Length * 3 + Y), Color.R, Color.G, Color.B, "Arial", 10, Math.Round((XMaxValue / XSteps * i)).ToString());
                 }
             }
 
 
         }
 
+        public static void DrawColumnarHistogram(OpenGL Drawer,Color Color,PointF[] Data,float BaseY,bool IsFill = true,bool IsDoubleColumn = true)
+        {
+            float Widht = (Data[1].X - Data[0].X) / (IsDoubleColumn? 1:2);
+            bool IsFirstDrawed = false;
+            if(Data[0].X == 0)
+            {
+                if(IsFill)
+                FillQuard(Drawer,Color,Data[0].X, BaseY, Data[0].Y,Widht/2);
+                else
+                    DrawQuard(Drawer, Color, Data[0].X, BaseY, Data[0].Y, Widht / 2);
+                IsFirstDrawed = true;
+            }
+            for (int i = (IsFirstDrawed?1:0); i < Data.Length; i++)
+            {
+                if(IsFill)
+                FillQuard(Drawer, Color, Data[i].X, BaseY, Data[i].Y - BaseY, Widht);
+                else
+                    DrawQuard(Drawer, Color, Data[i].X, BaseY, Data[i].Y - BaseY, Widht);
+            }
+        }
         /// <summary>
         /// Рисует 1 четверть системы координат. Начало расположено в (0,0). Белый цвет.
         /// </summary>
@@ -549,9 +575,7 @@ namespace SharpGLDrawLib
         {
             for (int k = 0; k < height / 2 * L; k++)
             {
-                int i0 = k / L;
-                int j0 = k % L;
-                int add = (height-1 - i0) * L + j0;
+                int add = (height-1 - k / L) * L + k % L;
                 swap(ref arr[k], ref arr[add]);
             }
             return arr;
@@ -591,6 +615,20 @@ namespace SharpGLDrawLib
             gl.PixelZoom(1*scale, 1*scale);
             gl.PixelStore(OpenGL.GL_UNPACK_ALIGNMENT, 4);
             gl.DrawPixels(Width, Height, OpenGL.GL_RGB, OpenGL.GL_UNSIGNED_BYTE, Addr);
+
+        }
+        public static void DrawImageByPixels(OpenGL gl, IntPtr Addr, float X, float Y, int Width, int Height, float scale, uint PixelStoreFormat)
+        {
+            if (X < 0 || Y < 0)
+            {
+                gl.RasterPos(0, 0);
+                gl.Bitmap(0, 0, 0, 0, X, Y, null);
+            }
+            else
+                gl.RasterPos(X, Y);
+            gl.PixelZoom(scale,scale);
+            gl.PixelStore(OpenGL.GL_UNPACK_ALIGNMENT, 4);
+            gl.DrawPixels(Width, Height, PixelStoreFormat, OpenGL.GL_UNSIGNED_BYTE, Addr);
 
         }
     }

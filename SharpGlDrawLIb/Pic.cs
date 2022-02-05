@@ -27,7 +27,7 @@ namespace SharpGLDrawLib
         /// <summary>
         /// Отношение размеров отрисованной картинки к к размеру самого изображения
         /// </summary>
-        float scale;
+        public float scale { get; private set; }
         /// <summary>
         /// Ширина и высота изображения (в памяти)
         /// </summary>
@@ -35,7 +35,8 @@ namespace SharpGLDrawLib
         /// <summary>
         /// Позиция картинки на экране. Шаг смещения при увелечении/уменьшении
         /// </summary>
-        float x,y;
+        public float x { get; private set; }
+        public float y { get; private set; }
         /// <summary>
         /// Материнский объект OpenGL
         /// </summary>
@@ -51,7 +52,9 @@ namespace SharpGLDrawLib
         /// </summary>
         public delegate void OpenGLDrawExpansion(OpenGL gl);
         public event OpenGLDrawExpansion Draw;
-        
+        public new delegate void MouseMove();
+        public event MouseMove MouseIsMoved;
+        PointF LastScreenPos;
         /// <summary>
         /// Извещает всех подписчиков о клике. Передаёт координаты клика в с.к. картинки
         /// </summary>
@@ -65,6 +68,7 @@ namespace SharpGLDrawLib
             gl = Main.OpenGL;
             Main.MouseWheel += Main_MouseWheel;
             Main.MouseLeave += Main_MouseLeave;
+           
             Main.OpenGLDraw += Main_OpenGLDraw;
             Main.MouseUp += Main_MouseUp;
             Main.MouseClick += Main_MouseClick;
@@ -73,7 +77,6 @@ namespace SharpGLDrawLib
 
         private void Main_MouseClick1(object sender, MouseEventArgs e)
         {
-            
             PointF ImgPos = ToOpenGLSpace(e.Location);
             EGlMouseClick?.Invoke(e, ImgPos);
         }
@@ -112,7 +115,17 @@ namespace SharpGLDrawLib
             GC.Collect();
             DrawImage();
         }
-
+        public void Unlock()
+        {
+            //SwapImageInMemory();
+            Img.UnlockBits(BData);
+        }
+        public void Lock()
+        {
+            BData = Img.LockBits(new Rectangle(new Point(0, 0), Img.Size), ImageLockMode.ReadWrite, Img.PixelFormat);
+            Addr = BData.Scan0;
+           // SwapImageInMemory();
+        }
         //обработчики перемещения мыши
         private void Main_MouseUp(object sender, MouseEventArgs e)
         {
@@ -137,6 +150,9 @@ namespace SharpGLDrawLib
                 Decrease(ScaleSpeed);
                 ScaleSpeed *= 0.9f;
             }
+
+           MouseIsMoved?.Invoke();
+            MouseIsMoved?.Invoke();
         }
 
         /// <summary>
@@ -154,9 +170,15 @@ namespace SharpGLDrawLib
             try
             {
                 if (BData != null)
-                    Drawer.DrawImageByPixels(gl, Addr, x, y, BData.Width, BData.Height, scale);
+                {
+                    if(BData.PixelFormat == PixelFormat.Format8bppIndexed)
+                    Drawer.DrawImageByPixels(gl, Addr, x, y, BData.Width, BData.Height, scale, OpenGL.GL_LUMINANCE);
+                    else
+                        Drawer.DrawImageByPixels(gl, Addr, x, y, BData.Width, BData.Height, scale);
+                    gl.DrawText(5,5,Color.Red.R, Color.Red.G, Color.Red.B,"Arial",15, $"{BData.Width}x{BData.Height};" + ((BData.PixelFormat == PixelFormat.Format8bppIndexed) ? "   1 channel." : "   3 channel."));
+                }
             }
-            catch { throw new Exception(); }
+            catch(Exception ex) { Debug.WriteLine(ex.Message); }
               Draw?.Invoke(gl);
              gl.Flush();
         }
@@ -200,8 +222,10 @@ namespace SharpGLDrawLib
         public void Increase(float IncreaseStep)
         {
             scale += IncreaseStep;
-            x -= scale*100;
-            y -= scale * 100;
+            //Point CurrentPos = FromOpenGLToPictureSpace(ToOpenGLSpace(new Point(0, 0)));
+            //x -= (LastScreenPos.X - CurrentPos.X)*scale;
+            //y -= (LastScreenPos.Y - CurrentPos.Y)*scale;
+            //LastScreenPos = CurrentPos;
             DrawImage();
         }
         /// <summary>
@@ -210,10 +234,13 @@ namespace SharpGLDrawLib
         /// <param name="DecreaseStep"></param>
         public void Decrease(float DecreaseStep)
         {
-            if(scale - DecreaseStep >=0)
-            scale -= DecreaseStep;
-            x += scale * 100;
-            y += scale * 100;
+            if (scale - DecreaseStep >= 0)
+                scale -= DecreaseStep;
+            else return;
+            //Point CurrentPos = FromOpenGLToPictureSpace(ToOpenGLSpace(new Point(0, 0)));
+            //x += (LastScreenPos.X - CurrentPos.X)*scale;
+            //y += (LastScreenPos.Y - CurrentPos.Y)*scale;
+            //LastScreenPos = CurrentPos;
             DrawImage();
         }
         /// <summary>
@@ -225,6 +252,7 @@ namespace SharpGLDrawLib
         {
             x += dx;
             y += dy;
+            LastScreenPos = FromOpenGLToPictureSpace(ToOpenGLSpace(new Point(0, 0)));
             DrawImage();
         }
         /// <summary>
@@ -246,6 +274,7 @@ namespace SharpGLDrawLib
             {
                 int dx = CurrentPos.X - LastPos.X, dy = CurrentPos.Y - LastPos.Y;
                 Move(dx, -dy);
+                MouseIsMoved?.Invoke();
             }
             LastPos = CurrentPos;
         }

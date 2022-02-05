@@ -1,8 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Drawing;
 using SharpGL;
 using System.Windows.Forms;
@@ -26,7 +22,7 @@ namespace SharpGLDrawLib
         /// <summary>
         /// Скорость увеличения и уменьшения.
         /// </summary>
-        public float ScaleSpeed = 0.1f;
+        float ScaleSpeed = 0.1f;
         /// <summary>
         /// Отношение размеров отрисованной картинки к к размеру самого изображения.
         /// </summary>
@@ -67,6 +63,9 @@ namespace SharpGLDrawLib
         /// <summary>
         /// Конструктор класса
         /// </summary>
+        
+        public bool IsColumnarHistogram, IsFillColumn, IsDoubleColumn;
+        public float XModifier = 5, YModifier = 2;
         public Graph() : base()
         {
             gl = Main.OpenGL;
@@ -169,8 +168,8 @@ namespace SharpGLDrawLib
         {
             InitOpenGL(0, 0, this.Width, this.Height);
             YPosData = _Data;
-            MaxX = _MaxX + MaxModifier;
-            MaxY = _MaxY + MaxModifier;
+            MaxX = _MaxX *XModifier;
+            MaxY = _MaxY *YModifier;
             BaseXSteps = _BaseXSteps;
             BaseYSteps = _BaseYSteps;
             scale = _scale;
@@ -189,7 +188,7 @@ namespace SharpGLDrawLib
             PointF[] PData = new PointF[YPosData.Length];
             for (int i = 0; i < YPosData.Length; i++)
             {
-                PData[i] = new PointF((i + DX + x)*scale, (YPosData[i] + y)*scale);
+                PData[i] = new PointF((i*XModifier + DX + x)*scale, (YPosData[i]*YModifier + y)*scale);
             }
             Points = PData;
         }
@@ -221,12 +220,15 @@ namespace SharpGLDrawLib
             gl.LoadIdentity();
             gl.ClearColor(0, 0, 0, 0);
 
-           
+
             if (Points != null)
             {
-                Drawer.DrawPolygon(gl, Color.Red, Points);
+                if (IsColumnarHistogram)
+                    Drawer.DrawColumnarHistogram(gl, Color.Red, Points, y * scale, IsFillColumn, IsDoubleColumn);
+                else
+                    Drawer.DrawPolygon(gl, Color.Red, Points);
                 Drawer.DrawCoordSystem(gl, Color.White, MaxX * scale, MaxY * scale, (int)(BaseXSteps * scale / BaseScale * GraphStemModifier), (int)(BaseYSteps * scale / BaseScale * GraphStemModifier), 6, MaxXValue, MaxYValue, x * scale, y * scale, true, false, true);
-            }            
+            }     
 
             gl.Flush();
         }
